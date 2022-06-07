@@ -1,0 +1,156 @@
+---
+title: "Diagnosis de diabetes en pacientes"
+author: "Alicia Lozoya Colmenar"
+date: "7/6/2022"
+output:
+  html_document:
+    toc: yes
+    toc_depth: 2
+    toc_float: yes
+  pdf_document:
+    toc: yes
+    toc_depth: 2
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, comment = NULL, cache = TRUE, fig.width = 7, fig.height = 7, fig_caption = TRUE)
+```
+
+```{r libraries, include=FALSE}
+library(knitr)
+library(ggseqlogo)
+library(class)
+library(gmodels)
+library(ROCR)
+library(pROC)
+library(ggplot2)
+```
+
+# Introducción
+
+En esta PEC se va a realizar un informe para la diagnosis de diabetes en pacientes, a partir de un conjunto de variables usuales en la práctica clínica. Estas son:
+
+· Pregnant: Número de veces embarazada
+· Glucose: Concentración de glucosa plasmática a las 2 horas en una prueba de tolerancia oral a la glucosa
+· Pressure: Presión arterial diastólica (mm Hg)
+· Triceps: Grosor del pliegue cutáneo del tríceps (mm)
+· Insulin: Insulina sérica de 2 horas (mu U/ml)
+· Mass: Índice de masa corporal (peso en kg/(altura en m)2)
+· Pedigree: Función de pedigrí de diabetes
+· Age: Edad (años)
+· Class: 0 en caso de no tener diabetes y 1 en caso contrario.
+
+Se tiene 8 variables predictoras y una variable binaria como respuesta con valores 0 y 1.
+
+# Objetivo
+
+En esta PEC se analizan esto datos mediante la implementación de los diferentes algoritmos estudiados: k-Nearest Neighbour, Naive Bayes, Artificial Neural Network, Support Vector Machine, Arbol de Decisión y Random Forest para diagnosticar si un paciente tiene diabetes.
+
+# Preparación del directorio
+
+En este punto voy a organizar mi zona de trabajo que será `workingDir` con una carpeta de resultados.
+
+Todos los ficheros con los datos y el código utilizados para generar este informe se pueden encontrar en un repositorio de github. [https://github.com/alocol/Machine-learning.git]
+
+```{r working directory, echo = FALSE, eval=FALSE}
+# Working directory
+setwd("C:\\Users\\Alicia Lozoya\\Desktop\\MASTER BIOINF\\Machine learning\\PEC4\\Machine-learning")
+workingDir <- getwd()
+dir.create("results")
+resultsDir <- file.path(workingDir, "results/")
+```
+
+# Exploración de los datos
+
+En la siguiente tabla podemos ver las primeras filas de datos con las que vamos a trabajar.
+
+```{r data base, echo = FALSE, eval=TRUE}
+diabetes <- read.table("./pima_indians_diabetis.txt", header = TRUE)
+head(diabetes)
+```
+Siempre que empezamos a manipular cualquier tipo de base de datos, debemos hacer una primera exploración del tipo de datos con los que trabajamos y que estos estén de la forma correcta antes de seguir con el análisis. Una forma rápida de hacer esta primera exploración es con el comando **summary()**. Podemos ver que los siguientes 5 valores depues de *pregnat* tienen un mínimo de 0, esto nos puede dar pistas que hay algo que no esta bien metido en la base de datos, o que se ha nombrado de forma diferente. 
+
+```{r data base summary, echo = FALSE, eval=TRUE}
+summary(diabetes)
+```
+
+En el siguiente tabla, podemos ver los 50 primero datos de la glucosa colocados en orden. Podemos observar que 5 de las personas tienen un resultado de 0 y que la siguiente en la lista es de 44, cabe pensar que es un dato que no procede en la tabla y por lo tanto debería aparecer como NA.  
+
+```{r data base increased glucose, echo = FALSE, eval=TRUE}
+head(sort(diabetes$glucose), 50)
+```
+De la siguiente manera se corriguen los valores 0 por NA.
+```{r 0 to NA, echo = TRUE, eval=TRUE}
+diabetes$glucose[diabetes$glucose == 0] <- NA
+diabetes$pressure[diabetes$pressure == 0] <- NA
+diabetes$triceps[diabetes$triceps == 0] <- NA
+diabetes$insulin[diabetes$insulin == 0] <- NA
+diabetes$mass[diabetes$mass == 0] <- NA
+```
+
+Como bien se ve en la introducción tenemos que la última variable es categórica o factor. Por lo tanto, vamos a informar al sistema de que lo trate como tal, y no numérica.
+
+```{r num to fac, echo = TRUE, eval=TRUE}
+diabetes$class <- factor(diabetes$class)
+levels(diabetes$class) <- c("negativo", "positivo")
+```
+
+A continuación vamos a ver el resumen después de las soluciones.
+
+```{r data base summary2, echo = FALSE, eval=TRUE}
+summary(diabetes)
+```
+
+## Gráficas de los datos
+
+Las gráficas es una forma de ver los resultados que hemos sacado en el resumen de una forma más visual. Como por ejemplo, podemos ver como el número de embarazos se encuentra sesgado a la izquierda, lo que coincide con la media de unos 3 embarazos por persona.
+
+Embarazos: 
+
+```{r pregnant, echo = FALSE, eval=TRUE}
+ggplot(diabetes, aes(x=pregnant))+geom_histogram()
+```
+
+Glucosa:
+
+```{r glucose, echo = FALSE, eval=TRUE}
+ggplot(diabetes, aes(x=glucose))+geom_density()
+```
+
+Presión:
+
+```{r pressure, echo = FALSE, eval=TRUE}
+ggplot(diabetes, aes(x=pressure))+geom_density()
+```
+
+Tríceps:
+
+```{r triceps, echo = FALSE, eval=TRUE}
+ggplot(diabetes, aes(x=triceps))+geom_density()
+```
+
+Insuluna:
+
+```{r insulin, echo = FALSE, eval=TRUE}
+ggplot(diabetes, aes(x=insulin))+geom_density()
+```
+
+Edad:
+
+```{r age, echo = FALSE, eval=TRUE}
+ggplot(diabetes, aes(x=age))+geom_histogram()
+```
+
+Masa:
+
+```{r mass, echo = FALSE, eval=TRUE}
+ggplot(diabetes, aes(x=mass))+geom_density()
+```
+
+Resultados de la diabetes:
+
+```{r class, echo = FALSE, eval=TRUE}
+ggplot(diabetes, aes(x=class, y= pedigree))+geom_boxplot()
+```
+
+# k-Nearest Neighbour
