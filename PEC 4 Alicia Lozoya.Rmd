@@ -25,6 +25,7 @@ library(ROCR)
 library(pROC)
 library(ggplot2)
 library(C50)
+library(caret)
 ```
 
 # Introducción
@@ -164,15 +165,7 @@ data.train <- diabetes[train,]
 data.test <- diabetes[-train,]
 ```
 
-A continuación vamos a comprobar si las división de los datos es la esperada, alrededor más o menos de un 30% de positivos. 
-Entrenamiento:
-```{r train, echo = FALSE, eval=TRUE}
-prop.table(table(data.train$class))
-```
-Prueba:
-```{r test, echo = FALSE, eval=TRUE}
-prop.table(table(data.test$class))
-```
+
 # k-Nearest Neighbour
 
 # Naive Bayes 
@@ -183,13 +176,67 @@ prop.table(table(data.test$class))
 
 # Arbol de Decisión 
 ## Entrenamiento del modelo
-En el siguiente resultado podemos ver los resultados básicos del modelo. Vemos que el tamaño del arbol generado es de 6, lo que indica que tienen 6 decisiones de profundidad
+En el siguiente resultado podemos ver los resultados básicos del modelo. Vemos que el tamaño del arbol generado es de 6, lo que indica que tienen 6 decisiones de profundidad.
 ```{r classifier, echo = FALSE, eval=TRUE}
 modelad <- C5.0(data.train[-9], data.train$class)
 modelad
 ```
 
+En este paso vamos a ver un resumen del modelo. Como cabe esperar es la variable glucose la que mayor asociación presenta con la diabetes. Tambíen cabe destacar que aquellas que tuvieron un número alto de embarazos (>6) y un BMI mayor a 35.7 también tienen una mayor predisposición a padecerla. Por otro lado, la juventuz (<=24) favorece el no padecerla aunque los niveles de glucosa sean mayores a 123. 
+
+Si nos dirigimos a la matriz de confusión del modelo podemos resaltar la tasa de error que es de un 21.9%.
+
+```{r summary modelad, echo = FALSE, eval=TRUE}
+summary(modelad)
+```
+```{r tree, echo = FALSE, eval=TRUE}
+plot(modelad)
+```
+
+## Evaluación del modelo
+
+Vamos a crear un vector con los valores predichos y los comparamos con los reales usando la función **CrossTable()**
+
+```{r evaluationad, echo = FALSE, eval=TRUE}
+adpred <- predict(modelad, data.test)
+CrossTable(data.test$class, adpred, 
+           prop.chisq = FALSE, prop.c = FALSE, prop.r = FALSE,
+           dnn = c('diabetes actual', 'diabetes predicha'))
+```
+Podemos ver que de los 153 registros de prueba, el modelo predijo 129 negativos y 55 positivos, lo que resulta de un 72,7% y una tasa de error del 27.3%. En el siguiente punto veremos como mejora el modelo con la opción boosting.
+
+## Mejora del modelo
+
+Con esta forma, el programa va generando árboles de decisión y se quedará con el mejor. 
+
+```{r boostingad, echo = FALSE, eval=TRUE}
+adboost <- C5.0(data.train[-9], data.train$class, trials = 10)
+adboost
+```
+
+```{r}
+summary(adboost)
+```
+Tras 10 *trials* la tasa de error se reduce a un 18.3%, hay una leve mejoría en el modelo. El siguiente paso es ver los datos en la tabla, y hacer la comprobación. Aqui podemos ver que se redujo la tasa de error a un 24,1%.
+
+```{r predboost, echo = FALSE, eval=TRUE}
+adpredboost <- predict(adboost, data.test)
+CrossTable(data.test$class, adpredboost,
+           prop.chisq = FALSE, prop.c = FALSE, prop.r = FALSE,
+           dnn = c('diabetes actual', 'diabetes predicha'))
+```
 
 
+```{r predboost, echo = FALSE, eval=TRUE}
+ACUad <- adpredboost == data.test$class
+tabla5 <- data.frame(prop.table(table(ACUad)))
+ACU5 <- tabla5$Freq[2]
+SEN5 <- sensitivity(data.test$class, adpredboost)
+SPE <- specificity(data.test$class, adpredboost)
+
+mad <- list(ACCURACY = ACU5, SENSITIVITY= SEN5, SPECIFICITY = SPE)
+
+data.frame(mad)
+```
 
 # Random Forest
