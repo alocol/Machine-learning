@@ -24,6 +24,7 @@ library(gmodels)
 library(ROCR)
 library(pROC)
 library(ggplot2)
+library(C50)
 ```
 
 # Introducción
@@ -153,4 +154,42 @@ Resultados de la diabetes:
 ggplot(diabetes, aes(x=class, y= pedigree))+geom_boxplot()
 ```
 
+# Preparación de los datos: train y test
+
+En este punto vamos a dividir los datos en dos, un 67% para el entrenamiento y un 33% para la prueba. Debemos mantener la aleatoriedad de nuestra base de datos por lo tanto utilizaré la función **sample()**. Para garantizar los resultados utilizaremos **set.seed()**.
+```{r seed, echo = FALSE, eval=FALSE}
+set.seed(12345)
+train<-sample(1:nrow(diabetes),round(0.67*nrow(diabetes)))
+data.train <- diabetes[train,]
+data.test <- diabetes[-train,]
+```
+
+A continuación vamos a comprobar si las división de los datos es la esperada, alrededor más o menos de un 30% de positivos. 
+Entrenamiento:
+```{r train, echo = FALSE, eval=TRUE}
+prop.table(table(data.train$class))
+```
+Prueba:
+```{r test, echo = FALSE, eval=TRUE}
+prop.table(table(data.test$class))
+```
 # k-Nearest Neighbour
+
+# Naive Bayes 
+
+# Artificial Neural Network 
+
+# Support Vector Machine 
+
+# Arbol de Decisión 
+## Entrenamiento del modelo
+En el siguiente resultado podemos ver los resultados básicos del modelo. Vemos que el tamaño del arbol generado es de 6, lo que indica que tienen 6 decisiones de profundidad
+```{r classifier, echo = FALSE, eval=TRUE}
+modelad <- C5.0(data.train[-9], data.train$class)
+modelad
+```
+
+
+
+
+# Random Forest
