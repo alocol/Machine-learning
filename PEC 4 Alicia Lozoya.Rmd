@@ -26,20 +26,32 @@ library(pROC)
 library(ggplot2)
 library(C50)
 library(caret)
+library(randomForest)
+library(e1071)
+library(kernlab)
 ```
+
 
 # Introducción
 
 En esta PEC se va a realizar un informe para la diagnosis de diabetes en pacientes, a partir de un conjunto de variables usuales en la práctica clínica. Estas son:
 
 · Pregnant: Número de veces embarazada
+
 · Glucose: Concentración de glucosa plasmática a las 2 horas en una prueba de tolerancia oral a la glucosa
+
 · Pressure: Presión arterial diastólica (mm Hg)
+
 · Triceps: Grosor del pliegue cutáneo del tríceps (mm)
+
 · Insulin: Insulina sérica de 2 horas (mu U/ml)
+
 · Mass: Índice de masa corporal (peso en kg/(altura en m)2)
+
 · Pedigree: Función de pedigrí de diabetes
+
 · Age: Edad (años)
+
 · Class: 0 en caso de no tener diabetes y 1 en caso contrario.
 
 Se tiene 8 variables predictoras y una variable binaria como respuesta con valores 0 y 1.
@@ -50,7 +62,7 @@ En esta PEC se analizan esto datos mediante la implementación de los diferentes
 
 # Preparación del directorio
 
-En este punto voy a organizar mi zona de trabajo que será `workingDir` con una carpeta de resultados.
+En este punto voy a organizar mi zona de trabajo que será `workingDir`.
 
 Todos los ficheros con los datos y el código utilizados para generar este informe se pueden encontrar en un repositorio de github. [https://github.com/alocol/Machine-learning.git]
 
@@ -58,8 +70,6 @@ Todos los ficheros con los datos y el código utilizados para generar este infor
 # Working directory
 setwd("C:\\Users\\Alicia Lozoya\\Desktop\\MASTER BIOINF\\Machine learning\\PEC4\\Machine-learning")
 workingDir <- getwd()
-dir.create("results")
-resultsDir <- file.path(workingDir, "results/")
 ```
 
 # Exploración de los datos
@@ -69,8 +79,9 @@ En la siguiente tabla podemos ver las primeras filas de datos con las que vamos 
 ```{r data base, echo = FALSE, eval=TRUE}
 diabetes <- read.table("./pima_indians_diabetis.txt", header = TRUE)
 head(diabetes)
+
 ```
-Siempre que empezamos a manipular cualquier tipo de base de datos, debemos hacer una primera exploración del tipo de datos con los que trabajamos y que estos estén de la forma correcta antes de seguir con el análisis. Una forma rápida de hacer esta primera exploración es con el comando **summary()**. Podemos ver que los siguientes 5 valores depues de *pregnat* tienen un mínimo de 0, esto nos puede dar pistas que hay algo que no esta bien metido en la base de datos, o que se ha nombrado de forma diferente. 
+Siempre que empezamos a manipular cualquier tipo de base de datos, debemos hacer una primera exploración del tipo de datos con los que trabajamos y que estos estén de la forma correcta antes de seguir con el análisis. Una forma rápida de hacer esta primera exploración es con el comando **summary()**. Podemos ver que los siguientes 5 valores despues de *pregnant* tienen un mínimo de 0, esto nos puede dar pistas que hay algo que no esta bien metido en la base de datos, o que se ha nombrado de forma diferente. 
 
 ```{r data base summary, echo = FALSE, eval=TRUE}
 summary(diabetes)
@@ -90,17 +101,22 @@ diabetes$insulin[diabetes$insulin == 0] <- NA
 diabetes$mass[diabetes$mass == 0] <- NA
 ```
 
-Como bien se ve en la introducción tenemos que la última variable es categórica o factor. Por lo tanto, vamos a informar al sistema de que lo trate como tal, y no numérica.
+Como bien se ve en la introducción tenemos una variable categórica o factor. Por lo tanto, vamos a informar al sistema de que lo trate como tal, y no numérica.
 
 ```{r num to fac, echo = TRUE, eval=TRUE}
 diabetes$class <- factor(diabetes$class)
 levels(diabetes$class) <- c("negativo", "positivo")
 ```
 
-A continuación vamos a ver el resumen después de las soluciones.
+Me he dado cuenta que el número de valores nulos es muy alto, alrededor de un 50%, como no tenemos la posibilidad de preguntar a los investigadores del estudio que ha sucedido con esos datos, tenemos dos opciones; eliminarlos, lo cual nos reduce mucho la muestra o reemplazarlos por algún valor como la media o mediana de los parametros. En este caso lo voy a reemplazar por la media. 
 
 ```{r data base summary2, echo = FALSE, eval=TRUE}
+for(i in 1:ncol(diabetes[-9])) {
+  diabetes[, i][is.na(diabetes[ , i])] <- mean(diabetes[ , i], na.rm=TRUE)
+}
 summary(diabetes)
+
+
 ```
 
 ## Gráficas de los datos
@@ -158,33 +174,237 @@ ggplot(diabetes, aes(x=class, y= pedigree))+geom_boxplot()
 # Preparación de los datos: train y test
 
 En este punto vamos a dividir los datos en dos, un 67% para el entrenamiento y un 33% para la prueba. Debemos mantener la aleatoriedad de nuestra base de datos por lo tanto utilizaré la función **sample()**. Para garantizar los resultados utilizaremos **set.seed()**.
-```{r seed, echo = FALSE, eval=FALSE}
+```{r seed, echo = TRUE, eval=TRUE}
 set.seed(12345)
 train<-sample(1:nrow(diabetes),round(0.67*nrow(diabetes)))
 data.train <- diabetes[train,]
 data.test <- diabetes[-train,]
 ```
 
-
 # k-Nearest Neighbour
 
-# Naive Bayes 
+## Preparación de los datos
+Como hemos visto en el libro de la asignatura, Knn depende en gran medida de la escala de medición de las variables, por lo tanto el primer paso será normalizar los datos.
+```{r norm, echo = FALSE, eval=TRUE}
+ normalize <- function(x) {       return ((x - min(x)) / (max(x) - min(x))) }
+diabetes_n<- as.data.frame(lapply(diabetes[1:8], normalize))
+
+diabetes_n <- cbind(diabetes_n, class = diabetes$class)
+
+head(diabetes_n)
+```
+
+## Entrenamiento del modelo
+
+```{r modelknn, echo = TRUE, eval=TRUE}
+set.seed(12345)
+train<-sample(1:nrow(diabetes_n),round(0.67*nrow(diabetes_n)))
+data.train_n <- diabetes_n[train, -9]
+data.test_n <- diabetes_n[-train,-9]
+data.train.l <- diabetes[train, 9]
+data.test.l <- diabetes[-train, 9]
+
+predknn1 <- knn(train = data.train_n, test = data.test_n, cl = data.train.l, k=1)
+
+predknn3 <- knn(train =data.train_n, test = data.test_n, cl = data.train.l, k=3)
+
+predknn5 <- knn(train =data.train_n, test = data.test_n, cl = data.train.l, k=5)
+
+predknn7 <- knn(train =data.train_n, test = data.test_n, cl = data.train.l, k=7)
+
+predknn11 <- knn(train =data.train_n, test = data.test_n, cl = data.train.l, k=11)
+```
+
+## Evaluación de los modelos k: 1, 3, 5, 7, 11
+K:1
+
+```{r CM1, echo = FALSE, eval=TRUE}
+confusionMatrix(table(predknn1, data.test.l), positive = 'positivo')
+
+```
+
+K:3
+
+```{r CM3, echo = FALSE, eval=TRUE}
+confusionMatrix(table(predknn3, data.test.l), positive = 'positivo')
+
+```
+
+K5:
+
+```{r CM5, echo = FALSE, eval=TRUE}
+confusionMatrix(table(predknn5, data.test.l), positive = 'positivo')
+
+```
+
+K:7
+
+```{r CM7, echo = FALSE, eval=TRUE}
+confusionMatrix(table(predknn7, data.test.l), positive = 'positivo')
+
+```
+
+K:11
+
+```{r CM11, echo = FALSE, eval=TRUE}
+confusionMatrix(table(predknn11, data.test.l), positive = 'positivo')
+
+```
+
+En la siguiente tabla veremos las 3 métricas para explicar el rendimiento. Como cabe esperar, cuanto más alta es la K, mayor exactitud presenta el modelo en el momento de acertar casos (k11 = 0.7588933). Por otro lado, los modelos con mayor sensibilidad son k5(0.5952381) y k7(0.5952381). En cuanto a la especificidad k11(0.8520710) es el que mayor porcentaje presenta. 
+
+```{r prerf, echo = FALSE, eval=TRUE}
+ACUknn1 <- predknn1 == data.test$class
+tabla1 <- data.frame(prop.table(table(ACUknn1)))
+ACUknn1_1 <- tabla1$Freq[2]
+SEN1_1 <- posPredValue(data.test$class, predknn1, positive = "positivo")
+SPE1_1 <- posPredValue(data.test$class, predknn1, positive = "negativo")
+
+ACUknn3 <- predknn3 == data.test$class
+tabla1_3 <- data.frame(prop.table(table(ACUknn3)))
+ACUknn1_3 <- tabla1_3$Freq[2]
+SEN1_3 <- posPredValue(data.test$class, predknn3, positive = "positivo")
+SPE1_3 <- posPredValue(data.test$class, predknn3, positive = "negativo")
+
+ACUknn5 <- predknn5 == data.test$class
+tabla1_5 <- data.frame(prop.table(table(ACUknn5)))
+ACUknn1_5 <- tabla1_5$Freq[2]
+SEN1_5 <- posPredValue(data.test$class, predknn5, positive = "positivo")
+SPE1_5 <- posPredValue(data.test$class, predknn5, positive = "negativo")
+
+ACUknn7 <- predknn7 == data.test$class
+tabla1_7 <- data.frame(prop.table(table(ACUknn7)))
+ACUknn1_7 <- tabla1_7$Freq[2]
+SEN1_7 <- posPredValue(data.test$class, predknn7, positive = "positivo")
+SPE1_7 <- posPredValue(data.test$class, predknn7, positive = "negativo")
+
+ACUknn11 <- predknn11 == data.test$class
+tabla1_11 <- data.frame(prop.table(table(ACUknn11)))
+ACUknn1_11 <- tabla1_11$Freq[2]
+SEN1_11 <- posPredValue(data.test$class, predknn11, positive = "positivo")
+SPE1_11 <- posPredValue(data.test$class, predknn11, positive = "negativo")
+                      
+mknn <- list(KNN = c(1, 3, 5, 7, 11), ACCURACY = c(ACUknn1_1, ACUknn1_3, ACUknn1_5, ACUknn1_7, ACUknn1_11), SENSITIVITY= c(SEN1_1, SEN1_3, SEN1_5, SEN1_7, SEN1_11), SPECIFICITY = c(SPE1_1, SPE1_3, SPE1_5, SPE1_7, SPE1_11))
+
+data.frame(mknn)
+```
+
+# Naive Bayes
+## Entrenamiento del modelo
+
+Sin la activación de *laplace*.
+```{r modelnb, echo = FALSE, eval=TRUE}
+modelnb <- naiveBayes(data.train[-9], data.train.l)
+
+modelnb
+```
+
+Con activación de *laplace* = 1.
+
+```{r modelnb2, echo = FALSE, eval=TRUE}
+modelnb1 <- naiveBayes(data.train[-9], data.train.l, laplace = 1)
+
+modelnb1
+```
+## Evaluación del modelo
+
+Sin activación de *laplace*.
+
+```{r prednb, echo = FALSE, eval=TRUE}
+prednb <- predict(modelnb, data.test)
+confusionMatrix(prednb, data.test$class, positive = 'positivo')
+```
+
+Activación de *laplace* = 1.
+
+```{r prednb1, echo = FALSE, eval=TRUE}
+prednb1 <- predict(modelnb1, data.test)
+confusionMatrix(prednb1, data.test$class, positive = 'positivo')
+```
+
+Como vemos en la siguiente tabla, los resultados entre la activación de laplace o no, no afecta a los resultados. Es decir, que no hay una mejoría en el modelo como sería la reducción de falsos positivos y falsos negativos. 
+```{r tablenb1, echo = FALSE, eval=TRUE}
+ACUnb <- prednb == data.test$class
+tabla2 <- data.frame(prop.table(table(ACUnb)))
+ACUnb <- tabla2$Freq[2]
+SEN2 <- posPredValue(data.test$class, prednb, positive = 'positivo')
+SPE2 <- posPredValue(data.test$class, prednb, positive = 'negativo')
+
+ACUnb1 <- prednb1 == data.test$class
+tabla2_1 <- data.frame(prop.table(table(ACUnb1)))
+ACUnb1 <- tabla2_1$Freq[2]
+SEN2_1 <- posPredValue(data.test$class, prednb1, positive = 'positivo')
+SPE2_1 <- posPredValue(data.test$class, prednb1, positive = 'negativo')
+
+mnb <- list(laplace = c(0, 1), ACCURACY = c(ACUnb, ACUnb1), SENSITIVITY= c(SEN2, SEN2_1), SPECIFICITY = c(SPE2, SPE2_1))
+
+data.frame(mnb)
+```
 
 # Artificial Neural Network 
+Este apartado lo he realizado en Python, por lo tanto se encuentra en un documento en el mismo repositorio.
+
+Para esta parte, he utilizado los datos normalizados ya generados en el aparatado de Knn.
 
 # Support Vector Machine 
+## Entrenamiento del modelo
+kernel lineal:
+```{r modelsvm, echo = TRUE, eval=TRUE}
+modelsvm <- ksvm(class ~ ., data = data.train, kernel = "vanilladot")
+modelsvm
+```
+Radial bases "rbfdot":
+```{r modelsvm1, echo = TRUE, eval=TRUE}
+modelsvm1 <- ksvm(class ~ ., data = data.train, kernel = 'rbfdot')
+modelsvm1
+```
+
+## Evaluación del modelo
+
+kernel lineal:
+```{r predsvm, echo = FALSE, eval=TRUE}
+predsvm <- predict(modelsvm, data.test)
+confusionMatrix(table(predsvm, data.test$class), positive = 'positivo')
+
+```
+
+Radial basis "rbfdot":
+```{r predsvm1, echo = FALSE, eval=TRUE}
+predsvm1 <- predict(modelsvm1, data.test)
+confusionMatrix(table(predsvm1, data.test$class), positive = 'positivo')
+
+```
+
+Como podemos observar en la tabla el modelo lineal kernel tiene mejor rendimiento que el expresado por rbf. Por lo tanto, en este tipo de base de datos no serviría para mejorar el resultado.
+```{r predsvma, echo = FALSE, eval=TRUE}
+ACU4 <- predsvm == data.test$class
+tabla4 <- data.frame(prop.table(table(ACU4)))
+ACU4 <- tabla4$Freq[2]
+SEN4 <- posPredValue(data.test$class, predsvm, positive = 'positivo')
+SPE4 <- posPredValue(data.test$class, predsvm, positive = 'negativo')
+
+ACU4_1 <- predsvm1 == data.test$class
+tabla4_1 <- data.frame(prop.table(table(ACU4_1)))
+ACU4_1 <- tabla4_1$Freq[2]
+SEN4_1 <- posPredValue(data.test$class, predsvm1, positive = 'positivo')
+SPE4_1 <- posPredValue(data.test$class, predsvm1, positive = 'negativo')
+
+msvm <- list(FUNCION = c('kernel', 'rbf'), ACCURACY = c(ACU4, ACU4_1), SENSITIVITY= c(SEN4, SEN4_1), SPECIFICITY = c(SPE4, SPE4_1))
+
+data.frame(msvm) 
+```
 
 # Arbol de Decisión 
 ## Entrenamiento del modelo
-En el siguiente resultado podemos ver los resultados básicos del modelo. Vemos que el tamaño del arbol generado es de 6, lo que indica que tienen 6 decisiones de profundidad.
+Vemos que el tamaño del arbol generado es de 16, lo que indica que tienen 16 decisiones de profundidad.
 ```{r classifier, echo = FALSE, eval=TRUE}
 modelad <- C5.0(data.train[-9], data.train$class)
 modelad
 ```
 
-En este paso vamos a ver un resumen del modelo. Como cabe esperar es la variable glucose la que mayor asociación presenta con la diabetes. Tambíen cabe destacar que aquellas que tuvieron un número alto de embarazos (>6) y un BMI mayor a 35.7 también tienen una mayor predisposición a padecerla. Por otro lado, la juventuz (<=24) favorece el no padecerla aunque los niveles de glucosa sean mayores a 123. 
+En este paso vamos a ver un resumen del modelo. Como cabe esperar la variable glucose es la que mayor asociación presenta con la diabetes. 
 
-Si nos dirigimos a la matriz de confusión del modelo podemos resaltar la tasa de error que es de un 21.9%.
+Si nos dirigimos a la matriz de confusión del modelo podemos resaltar la tasa de error que es de un 18.3%.
 
 ```{r summary modelad, echo = FALSE, eval=TRUE}
 summary(modelad)
@@ -195,48 +415,113 @@ plot(modelad)
 
 ## Evaluación del modelo
 
-Vamos a crear un vector con los valores predichos y los comparamos con los reales usando la función **CrossTable()**
-
 ```{r evaluationad, echo = FALSE, eval=TRUE}
 adpred <- predict(modelad, data.test)
-CrossTable(data.test$class, adpred, 
-           prop.chisq = FALSE, prop.c = FALSE, prop.r = FALSE,
-           dnn = c('diabetes actual', 'diabetes predicha'))
+confusionMatrix(table(adpred, data.test$class), positive = 'positivo')
 ```
-Podemos ver que de los 153 registros de prueba, el modelo predijo 129 negativos y 55 positivos, lo que resulta de un 72,7% y una tasa de error del 27.3%. En el siguiente punto veremos como mejora el modelo con la opción boosting.
+
 
 ## Mejora del modelo
 
-Con esta forma, el programa va generando árboles de decisión y se quedará con el mejor. 
+Con esta forma, el programa va generando árboles de decisión y se quedará con el mejor. Vemos que el número de árboles se ha reducido a 8.2.
 
 ```{r boostingad, echo = FALSE, eval=TRUE}
 adboost <- C5.0(data.train[-9], data.train$class, trials = 10)
 adboost
 ```
 
-```{r}
-summary(adboost)
-```
-Tras 10 *trials* la tasa de error se reduce a un 18.3%, hay una leve mejoría en el modelo. El siguiente paso es ver los datos en la tabla, y hacer la comprobación. Aqui podemos ver que se redujo la tasa de error a un 24,1%.
 
 ```{r predboost, echo = FALSE, eval=TRUE}
 adpredboost <- predict(adboost, data.test)
-CrossTable(data.test$class, adpredboost,
-           prop.chisq = FALSE, prop.c = FALSE, prop.r = FALSE,
-           dnn = c('diabetes actual', 'diabetes predicha'))
+confusionMatrix(table(adpredboost, data.test$class),positive = 'positivo')
 ```
 
+En la siguiente tabla vemos que hay una mejoría en el rendimiento del modelo tras el boosting, pero hay que resaltar, que la sensibilidad es mejor en el primer modelo, y esta es importante para nuestro estudio. 
 
-```{r predboost, echo = FALSE, eval=TRUE}
+```{r predb, echo = FALSE, eval=TRUE}
+ACUad <- adpred == data.test$class
+tabla5 <- data.frame(prop.table(table(ACUad)))
+ACU51 <- tabla5$Freq[2]
+SEN51 <- posPredValue(data.test$class, adpred, positive = 'positivo')
+SPE51 <- posPredValue(data.test$class, adpred, positive = 'negativo')
+
 ACUad <- adpredboost == data.test$class
 tabla5 <- data.frame(prop.table(table(ACUad)))
 ACU5 <- tabla5$Freq[2]
-SEN5 <- sensitivity(data.test$class, adpredboost)
-SPE <- specificity(data.test$class, adpredboost)
+SEN5 <- posPredValue(data.test$class, adpredboost, positive = 'positivo')
+SPE <- posPredValue(data.test$class, adpredboost, positive = 'negativo')
 
-mad <- list(ACCURACY = ACU5, SENSITIVITY= SEN5, SPECIFICITY = SPE)
+mad <- list(ACCURACY = c(ACU51, ACU5), SENSITIVITY= c(SEN51, SEN5), SPECIFICITY = c(SPE51, SPE))
 
 data.frame(mad)
 ```
 
 # Random Forest
+## Entrenamiento del modelo
+
+Vamos a crear 2 modelos, el primero con 100 árboles y el segundo con 200.
+
+Podemos ver que con 100 árboles, número de variables utilizadas es de 2 y con un error al clasificar las observaciones de un 25,05%. 
+```{r random forest100, echo = FALSE, eval=TRUE}
+modelrf1 <- randomForest(data.train[-9], data.train$class, ntree = 100)
+modelrf1
+```
+
+Podemos ver que con 200 árboles, número de variables utilizadas es de 2 y con un error al clasificar las observaciones de un 26.02%. 
+```{r random forest200, echo = FALSE, eval=TRUE}
+modelrf2 <- randomForest(data.train[-9], data.train$class, ntree = 200)
+modelrf2
+```
+
+## Evaluación del modelo
+Vamos a ver que tal realiza las predicciones. 
+```{r predrf, echo = TRUE, eval=TRUE}
+predrf1 <- predict(modelrf1, data.test, type = "response")
+predrf2 <- predict(modelrf2, data.test, type = "response")
+```
+
+Modelo de 100 árboles:
+
+
+```{r CMm1, echo = FALSE, eval=TRUE}
+confusionMatrix(table(predrf1, data.test$class), positive = 'positivo')
+```
+
+```{r matrizrf1, echo = FALSE, eval=TRUE}
+ACUrf1 <- predrf1 == data.test$class
+tabla61 <- data.frame(prop.table(table(ACUrf1)))
+ACU61 <- tabla61$Freq[2]
+SEN61 <- posPredValue(data.test$class, predrf1, positive = 'positivo')
+SPE61 <- posPredValue(data.test$class, predrf1, positive = 'negativo')
+
+mrf1 <- list(ACCURACY = ACU61, SENSITIVITY= SEN61, SPECIFICITY = SPE61)
+
+data.frame(mrf1)
+
+```
+Modelo de 200 árboles:
+```{r CMm2, echo = FALSE, eval=TRUE}
+confusionMatrix(table(predrf2, data.test$class), positive = 'positivo')
+```
+
+```{r matrizrf2, echo = FALSE, eval=TRUE}
+ACUrf2 <- predrf2 == data.test$class
+tabla62 <- data.frame(prop.table(table(ACUrf2)))
+ACU62 <- tabla62$Freq[2]
+SEN62 <- posPredValue(data.test$class, predrf2, positive = 'positivo')
+SPE62 <- posPredValue(data.test$class, predrf2, positive = 'negativo')
+
+mrf2 <- list(ACCURACY = ACU62, SENSITIVITY= SEN62, SPECIFICITY = SPE62)
+
+data.frame(mrf2)
+```
+Comparando las tablas con las métricas de rendimiento, vemos que no hay una mejora entre el modelo de 100 árboles y el de 200. 
+
+# Conclusión // Discusión
+
+En todos los algoritmos que hemos estudiado, se han propuesto 3 métricas para evaluar su rendimiento; *accuracy*, *sensitivity* y *specificity*. 
+
+Podemos decir en base a los resultados que los algoritmos que mejor funcionan son las redes neuronales, ya que tienen una exactitud del 79%, mientras que el resto esta por debajo de los 77%. En cuanto a la sensibilidad (parametro importante para diagnosticar a los posibles diabéticos) podemos decir que el árbol de decisión funciona bastante bien con un 78%, y por último la especificidad siguen siendo las redes neuronales las que tienen el resultado más alto, entre un 91% y 93%. 
+
+
+

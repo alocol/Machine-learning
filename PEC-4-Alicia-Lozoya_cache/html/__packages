@@ -6,3 +6,8 @@ ROCR
 pROC
 ggplot2
 C50
+lattice
+caret
+randomForest
+e1071
+kernlab
